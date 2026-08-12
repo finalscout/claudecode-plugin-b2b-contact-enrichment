@@ -12,11 +12,12 @@ Three ways to find an email, each available as single lookup or bulk batch:
 | A full name + company domain | Professional find |
 | A news article URL (find its author) | Author find |
 
-- **Single lookup** — one blocking call via FinalScout's waterfall endpoints (no polling), with submit-and-poll as fallback
+- **Single lookup** — one blocking call via FinalScout's waterfall endpoints (no polling, up to a 900s window), with submit-and-poll as fallback
 - **Bulk lookup** — process any number of contacts from a CSV, list, table, or JSON, with progress reporting, paginated result collection, and optional CSV export
 - **Verification status** — each result is marked `Valid`, `Risky`, `Invalid`, or `Unknown`, with a 0–100 deliverability score and catch-all detection
 - **Enrichment** — results include title, company, location, LinkedIn URL, industry, and company details when available
-- **Optional extras** — personal/generic email fallback (LinkedIn method), contact tagging, custom `meta_data` passthrough for CRM correlation, and webhook notifications
+- **Search control** — `effort` (`low` / `high` / `max`) trades speed against coverage on bulk tasks at no extra credit cost, and `enable_related_domains` keeps professional lookups on exactly the domain you gave
+- **Optional extras** — personal/generic email fallback (LinkedIn method), contact tagging, custom `meta_data` passthrough for CRM correlation, and webhook notifications including opt-in `contact.not_found` events
 - **Account awareness** — credit balance and per-endpoint rate limits, with remaining credits shown after each operation
 
 ## What's included
@@ -92,9 +93,11 @@ You can paste a CSV, a table, or JSON. Results come back as a table:
 
 - Include personal emails (Gmail, etc.) or generic emails (info@, support@) — LinkedIn method
 - Deep-verify professional lookups when you're sure the domain is right
+- Restrict a professional lookup to the domain you gave, instead of letting it expand to related domains
+- Trade coverage for speed on bulk jobs with `effort` (same credit cost either way)
 - Tag contacts in your FinalScout account
 - Attach custom metadata (e.g. CRM ids) that comes back with each result
-- Send results to a webhook instead of polling
+- Send results to a webhook instead of polling — including an event for contacts where no email was found
 
 ## Pricing
 

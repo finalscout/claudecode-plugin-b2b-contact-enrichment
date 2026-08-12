@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "finalscout",
   "displayName": "FinalScout Email Finder",
-  "version": "1.1.0",
-  "description": "Find verified professional email addresses with the FinalScout API — by LinkedIn profile URL, full name + company domain, or news article URL. Single lookups, bulk batches with progress tracking, CSV export, webhooks, and credit checks.",
+  "version": "1.2.0",
+  "description": "Find verified professional email addresses with the FinalScout API — by LinkedIn profile URL, full name + company domain, or news article URL. Single lookups, bulk batches with progress tracking and search-effort control, CSV export, webhooks (including not-found events), and credit checks.",
   "author": {
     "name": "FinalScout",
     "email": "dev@finalscout.com",

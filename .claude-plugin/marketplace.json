@@ -7,13 +7,13 @@
   },
   "metadata": {
     "description": "FinalScout plugins for Claude Code — verified professional email finding and B2B contact enrichment",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "plugins": [
     {
       "name": "finalscout",
       "source": "./",
-      "description": "Find verified professional email addresses with the FinalScout API — by LinkedIn profile URL, full name + company domain, or news article URL. Single lookups, bulk batches, CSV export, webhooks, and credit checks.",
+      "description": "Find verified professional email addresses with the FinalScout API — by LinkedIn profile URL, full name + company domain, or news article URL. Single lookups, bulk batches with search-effort control, CSV export, webhooks (including not-found events), and credit checks.",
       "category": "productivity",
       "keywords": [
         "email-finder",
