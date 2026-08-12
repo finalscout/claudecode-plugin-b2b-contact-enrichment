@@ -1,7 +1,7 @@
 ---
 name: b2b-contact-enrichment
-description: "Find verified professional email addresses with the FinalScout API — by LinkedIn profile URL, by full name + company domain, or by news article URL (author lookup). Supports single lookups (long-polling waterfall or submit-and-poll), bulk batch tasks with progress tracking, paginated result dump, CSV export, webhooks, and account credits / rate-limit checks."
-version: 1.1.0
+description: "Find verified professional email addresses with the FinalScout API — by LinkedIn profile URL, by full name + company domain, or by news article URL (author lookup). Supports single lookups (long-polling waterfall or submit-and-poll), bulk batch tasks with progress tracking and search-effort control, paginated result dump, CSV export, webhooks (including not-found events), and account credits / rate-limit checks."
+version: 1.2.0
 metadata:
   openclaw:
     primaryEnv: FINALSCOUT_API_KEY
@@ -61,10 +61,11 @@ Cost is 1 credit per email found whether you send just the URL or the URL plus f
   "domain": "microsoft.com",
   "domain_extra": ["gatesfoundation.org"],
   "deep_verify": false,
+  "enable_related_domains": true,
   "meta_data": {"your_key": "your value"}
 }
 ```
-`domain_extra` (optional): extra candidate domains. `deep_verify` (optional, default `false`): deeper email verification — only set `true` when confident the domain is valid for the person.
+`domain_extra` (optional): extra candidate domains. `deep_verify` (optional, default `false`): deeper email verification — only set `true` when confident the domain is valid for the person. `enable_related_domains` (optional, default `true`): when no valid work email is found on the domain you gave, the search expands to related domains (e.g. `android.com` → `google.com`); set `false` to search only the domain(s) you provided.
 
 **`author`** — only `article_url` is required:
 ```json
@@ -80,7 +81,7 @@ Cost is 1 credit per email found whether you send just the URL or the URL plus f
 
 ## Single lookup — Waterfall (preferred)
 
-One blocking call; the server holds the connection until the task finishes or `timeout` (seconds, 30–600, default 80) is reached.
+One blocking call; the server holds the connection until the task finishes or `timeout` (seconds, 30–900, default 80) is reached.
 
 ```bash
 curl -s -m 130 -w "\nHTTP %{http_code}" \
@@ -90,11 +91,15 @@ curl -s -m 130 -w "\nHTTP %{http_code}" \
   -d '{"person":{"full_name":"<name>","domain":"<domain>"}}'
 ```
 
-Swap the path for `/find/linkedin/single` or `/find/author/single` with the matching `person` body. Set curl's `-m` (max time) a bit above the `timeout` value. Longer timeouts (up to 600) mean fewer round-trips; use a shorter one if your shell caps command runtime.
+Swap the path for `/find/linkedin/single` or `/find/author/single` with the matching `person` body. Set curl's `-m` (max time) a bit above the `timeout` value. Longer timeouts (up to 900) mean fewer round-trips; use a shorter one if your shell caps command runtime.
 
 **Responses:**
 - `HTTP 200` → task complete; read `contact`, `credits_consumed`, `credits_available` (see [Interpreting results](#interpreting-results)).
 - `HTTP 408` → still running; body has `{"id": "...", "status": "Running"}`. Resubmit the same request to keep waiting, or poll `/v1/find/single/status?id=<id>`.
+
+Query params (all waterfall endpoints):
+- `timeout` — seconds to wait, 30–900, default 80.
+- `no_charge_on_timeout` — boolean, default `false`. When `true`, no credit is charged if no email is found inside the `timeout` window — even if the server finds one after the window elapses ("no charge, no result"). Use it when the caller cannot poll or receive webhooks and would otherwise pay for a result it never sees. Do **not** set it when you intend to poll `/v1/find/single/status` afterwards: a match found after the deadline is discarded, so you would trade a late-but-real result for a guaranteed-free miss.
 
 Optional body fields (top level, next to `person`):
 - `"tags": ["tag1"]` — organize contacts in the FinalScout web app (all methods)
@@ -152,9 +157,12 @@ Endpoints: `/v1/find/professional/bulk`, `/v1/find/linkedin/bulk`, `/v1/find/aut
 Optional top-level fields (all bulk endpoints unless noted):
 - `"name"` — task name, max 300 characters
 - `"duplicate"` — `skip_duplicates` (default) or `scrape_and_update_duplicates` (re-process contacts already in the account)
+- `"effort"` — `low` | `high` | `max` (default `max`). How exhaustively to search: `low` returns faster and may find fewer emails, `max` is slower and may find more. **All values cost the same** — there is no extra credit charge for `max`, so only drop to `low`/`high` when the user wants speed over coverage.
 - `"tags": ["tag1"]`
-- `"webhook_url": "<url>"` and `"webhook_subscribe_events": ["bulk_task.finished", "contact.change"]` — see [Webhooks](#webhooks)
+- `"webhook_url": "<url>"` and `"webhook_subscribe_events": [...]` — see [Webhooks](#webhooks)
 - `"enable_work_email"` / `"enable_personal_email"` / `"enable_generic_email"` — linkedin bulk only, same defaults as single
+
+Per-person fields are the same as the single-find `person` objects above — including `deep_verify` and `enable_related_domains` on `professional` bulk, which are set per row, not per request.
 
 The response is the task: `{id, status, total, finished, success, duplicated, credits_consumed, credits_available, ...}`. Save `id`.
 
@@ -215,9 +223,18 @@ Pass `webhook_url` in any find request to get HTTP POST callbacks instead of / i
 
 - **`single_task.finished`** — single find completed. Contains `contact` when an email was found, otherwise a `message`; plus `task_id`, `credits_consumed`, `meta_data`.
 - **`bulk_task.finished`** — bulk task completed. Task-level summary (`total`, `finished`, `success`, `duplicated`, `credits_consumed`, `credits_available`); no per-contact `meta_data` at this level.
-- **`contact.change`** — sent during bulk tasks for each contact whose email is found (or when an existing contact is updated). Contains `contact` and that contact's `meta_data`. Nothing is sent for contacts with no email found.
+- **`contact.change`** — sent during bulk tasks for each contact whose email is found (or when an existing contact is updated). Contains `contact` and that contact's `meta_data`.
+- **`contact.not_found`** — sent during bulk tasks for each contact with **no** email found. Contains that contact's `meta_data` but no `contact`. **Opt-in** — see below.
 
-Bulk requests can filter events with `webhook_subscribe_events` (array of the two bulk event names); if unset, all events are sent.
+Bulk requests filter events with `webhook_subscribe_events`. Allowed values: `bulk_task.finished`, `contact.change`, `contact.not_found`. If the field is omitted it defaults to `["bulk_task.finished", "contact.change"]` — `contact.not_found` is **not** included and must be listed explicitly:
+
+```json
+"webhook_subscribe_events": ["bulk_task.finished", "contact.change", "contact.not_found"]
+```
+
+Subscribe to `contact.not_found` when the caller needs one event per input row (e.g. writing every row back to a CRM); otherwise misses are silent and only show up in the task totals.
+
+**No-charge timeout events.** When a waterfall single find was submitted with `no_charge_on_timeout=true` and the window elapses with no email, the `single_task.finished` event fires immediately with `credits_consumed: 0` and the dedicated message `"No email was found within the no-charge time limit; no credit was charged."` — distinct from the ordinary `"Sorry, no valid email is found for this task."`. That is the only event for that task; a later natural completion sends nothing.
 
 ---
 
@@ -251,12 +268,11 @@ Always surface `credits_consumed` and `credits_available` after an operation.
 
 | Endpoint | Limit |
 |----------|-------|
-| /find/linkedin/single | 50 / second |
-| /find/author/single, /find/professional/single | 5 / second |
+| /find/linkedin/single, /find/author/single, /find/professional/single | 5 / second |
 | /find/single/status, /find/bulk/status, /find/bulk/export | 25 / second |
 | /find/*/bulk (all three) | 2 / second |
 | /account | 5 / second |
 
 ## Credits
 
-Universal credits: each email successfully found costs 1 credit, regardless of method. No charge when no email is found. Need test credits or higher limits → dev@finalscout.com.
+Universal credits: each email successfully found costs 1 credit, regardless of method. No charge when no email is found, and `effort` does not change the price. A waterfall single find sent with `no_charge_on_timeout=true` is also free when nothing is found inside the timeout window. Need test credits or higher limits → dev@finalscout.com.
