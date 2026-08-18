@@ -241,7 +241,7 @@ Subscribe to `contact.not_found` when the caller needs one event per input row (
 ## Interpreting results
 
 Contact fields that matter most:
-- `email` + `email_status`: `Valid` (safe to send), `Risky`, `Invalid`, `Unknown`. Only `Valid` is guaranteed deliverable; show `Risky`/`Unknown` emails with a caveat.
+- `email` + `email_status`: `Valid` (safe to send), `Invalid` (previously stored email re-verified as undeliverable — returned for reference with `email_score` 0; do not send), or `Not found` (stored/exported contacts without an email). Only `Valid` is deliverable. In find responses the `email`/`email_status`/`email_score`/`email_is_catchall` fields are omitted entirely when no email is found — treat absence as "not found", not an error.
 - `email_type`: `Work email`, `Personal email`, or `Generic email`.
 - `email_score` (0–100): deliverability confidence; higher is better.
 - `email_is_catchall`: domain accepts all mail; FinalScout's verification (via BounceBan) still makes these as reliable as standard addresses — mention it, don't discard.
